@@ -1,6 +1,6 @@
 from scipy.stats import uniform
 from math import ceil
-from random import random
+from random import random, shuffle
 
 class Bot:
     def __init__(self, minimum, maximum, num_total_values, sample_distribution, mean_value, bot_id):
@@ -31,27 +31,26 @@ class Bot:
         # linear strategy with random component
         return ceil(abs(estimate-value) / (10 + int(3*random())))
 
-    def buy_amount(self, value, central_values):
+    def buy_amount(self, value, central_values, quantity):
         estimate = self.get_estimate(central_values)
         if value < estimate:
             return self.strategy(estimate, value)
         return 0
     
-    def sell_amount(self, value, central_values):
+    def sell_amount(self, value, central_values, quantity):
         estimate = self.get_estimate(central_values)
         if value > estimate:
             return self.strategy(estimate, value)
         return 0
 
 class Game:
-    def __init__(self, num_bots=3, num_rounds=5, num_central_cards=5, minimum=0, maximum=1000,  sample_distribution=uniform.rvs, mean_value=uniform.mean(), sample_order_size=lambda:1+int(uniform.rvs()*9), easy_mode=False):
+    def __init__(self, num_bots=3, num_rounds=5, num_central_cards=5, minimum=0, maximum=1000,  sample_distribution=uniform.rvs, mean_value=uniform.mean(), easy_mode=False):
         self.num_rounds = num_rounds
         self.num_central_cards = num_central_cards
         self.minimum = minimum
         self.maximum = maximum
         self.player = 0, 0 # value, shares
         self.sample_distribution = sample_distribution
-        self.sample_order_size = sample_order_size
         self.easy_mode = easy_mode
         self.bots = [   Bot(
                         minimum=minimum,
@@ -79,31 +78,39 @@ class Game:
             print()
             print('round %d' % game_round)
             print(''.join(['-' for _ in range(6+game_round)]))
+            while True:
+                try:
+                    bid, bid_quantity = [int(value) for value in input('Enter your bid and quantity: ').strip().split()]
+                    break
+                except ValueError:
+                    print('Invalid format, enter bid and amount separated by a space.')
+        
 
             while True:
                 try:
-                    bid, ask = [int(value) for value in input('Enter your bid and ask: ').strip().split()]
+                    ask, ask_quantity = [int(value) for value in input('Enter your bid and quantity: ').strip().split()]
                     break
                 except ValueError:
-                    print('Invalid format, enter bid and ask separated by a space.')
+                    print('Invalid format, enter ask and amount separated by a space.')
                     
+
             delta_value = 0
             delta_shares = 0
 
+            shuffle(self.bots)            
+
             # get bot actions
             for bot in self.bots:
-                sell_amount = bot.sell_amount(bid, central_values)
-                buy_amount = bot.buy_amount(ask, central_values)
+                sell_amount = bot.sell_amount(bid, central_values, bid_quantity)
+                buy_amount = bot.buy_amount(ask, central_values, ask_quantity)
                 if sell_amount != 0:
-                    amount = self.sample_order_size()
-                    delta_shares += amount
-                    delta_value -= amount * bid
-                    print('Bot %d sold %d shares%s' % (bot.bot_id, amount, (' for %d.' % (amount*bid)) if self.easy_mode else '.'))
+                    delta_shares += sell_amount
+                    delta_value -= sell_amount * bid
+                    print('Bot %d sold %d shares%s' % (bot.bot_id, sell_amount, (' for %d.' % (sell_amount*bid)) if self.easy_mode else '.'))
                 if buy_amount != 0:
-                    amount = self.sample_order_size()
-                    delta_shares -= amount
-                    delta_value += amount * ask
-                    print('Bot %s purchased %d shares%s' % (bot.bot_id, amount, (' for %d.' % (amount*ask)) if self.easy_mode else '.'))
+                    delta_shares -= buy_amount
+                    delta_value += buy_amount * ask
+                    print('Bot %s purchased %d shares%s' % (bot.bot_id, buy_amount, (' for %d.' % (buy_amount*ask)) if self.easy_mode else '.'))
 
 
             prev_value, prev_shares = self.player
